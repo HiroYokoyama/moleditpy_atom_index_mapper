@@ -218,6 +218,7 @@ def test_choices_are_remembered(qapp, tmp_path, warnings):
         "method": core.METHOD_DISTANCE,
         "perceive": True,
         "fit_on": "heavy",
+        "manual": "swap",
     }
     again = make_dialog(FakeContext(mol))
     assert again.cmb_method.currentData() == core.METHOD_DISTANCE
@@ -233,3 +234,68 @@ def test_initialize_registers_one_menu_entry_and_one_window(qapp):
     second = atom_index_mapper.open_dialog()
     assert first is second
     first.close()
+
+
+def _manual_dialog(qapp, tmp_path, smiles="CCO"):
+    mol = embedded(smiles)
+    for atom in mol.GetAtoms():
+        atom.SetIntProp("_original_atom_id", 100 + atom.GetIdx())
+    context = FakeContext(mol)
+    dlg = make_dialog(context)
+    return context, dlg
+
+
+def _ids(mol):
+    return [a.GetIntProp("_original_atom_id") for a in mol.GetAtoms()]
+
+
+def test_manual_swap_exchanges_two_numbers(qapp, tmp_path, warnings):
+    context, dlg = _manual_dialog(qapp, tmp_path)
+    dlg._update_selection()
+    assert not dlg.btn_manual.isEnabled()
+    assert "select one atom" in dlg.lbl_selected.text()
+    context.selected = [2]
+    dlg._update_selection()
+    assert dlg.lbl_selected.text() == "3 (O)"
+    assert dlg.spin_number.value() == 3 and dlg.spin_number.maximum() == 9
+    dlg.spin_number.setValue(1)
+    order = dlg.apply_number()
+    assert order[:3] == [2, 1, 0]
+    assert _ids(context.current_molecule)[:3] == [102, 101, 100]
+    assert context.current_molecule.GetAtomWithIdx(0).GetSymbol() == "O"
+    assert context.undo == 1
+    assert "swapped" in dlg.lbl_result.text()
+
+
+def test_manual_move_shifts_the_atoms_between(qapp, tmp_path, warnings):
+    context, dlg = _manual_dialog(qapp, tmp_path)
+    dlg.radio_move.setChecked(True)
+    context.selected = [2]
+    dlg._update_selection()
+    dlg.spin_number.setValue(1)
+    dlg.apply_number()
+    assert _ids(context.current_molecule)[:4] == [102, 100, 101, 103]
+    assert "moved to 1" in dlg.lbl_result.text()
+
+
+def test_manual_needs_exactly_one_atom(qapp, tmp_path, warnings):
+    context, dlg = _manual_dialog(qapp, tmp_path)
+    context.selected = [0, 1]
+    dlg._update_selection()
+    assert dlg.lbl_selected.text() == "2 atoms - select one"
+    assert dlg.apply_number() is None
+    assert "exactly one" in warnings[-1]
+    context.selected = [1]
+    dlg._update_selection()
+    dlg.spin_number.setValue(2)
+    dlg.apply_number()
+    assert context.undo == 0
+    assert "already has that number" in dlg.lbl_result.text()
+
+
+def test_the_selection_is_watched_only_while_shown(qapp, tmp_path, warnings):
+    _, dlg = _manual_dialog(qapp, tmp_path)
+    dlg.show()
+    assert dlg._selection_timer.isActive()
+    dlg.close()
+    assert not dlg._selection_timer.isActive()

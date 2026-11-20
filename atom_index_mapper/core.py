@@ -704,3 +704,26 @@ def parse_pins(text: str, n_ref: int, n_cur: int) -> dict[int, int]:
             raise MappingError(f"Reference atom {r} is pinned twice.")
         pins[r - 1] = c - 1
     return pins
+
+
+def swap_order(count: int, first: int, second: int) -> list[int]:
+    """Renumbering order that exchanges two atoms' numbers."""
+    _check_index(count, first)
+    _check_index(count, second)
+    order = list(range(count))
+    order[first], order[second] = order[second], order[first]
+    return order
+
+
+def move_order(count: int, atom: int, position: int) -> list[int]:
+    """Renumbering order that moves one atom to ``position`` and shifts the rest."""
+    _check_index(count, atom)
+    _check_index(count, position)
+    order = [i for i in range(count) if i != atom]
+    order.insert(position, atom)
+    return order
+
+
+def _check_index(count: int, index: int) -> None:
+    if not 0 <= index < count:
+        raise MappingError(f"Atom number {index + 1} is outside 1-{count}.")

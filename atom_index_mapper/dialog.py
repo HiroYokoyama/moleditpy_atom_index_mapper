@@ -6,7 +6,7 @@ import logging
 import os
 
 import numpy as np
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QRadioButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -113,6 +115,30 @@ class AtomIndexMapperDialog(QDialog):
         match_form.addRow(self.btn_match)
         layout.addWidget(match_box)
 
+        manual_box = QGroupBox("Change one number by hand")
+        manual_form = QFormLayout(manual_box)
+        self.lbl_selected = QLabel()
+        manual_form.addRow("Selected atom:", self.lbl_selected)
+        self.spin_number = QSpinBox()
+        self.spin_number.setRange(1, 1)
+        manual_form.addRow("New number:", self.spin_number)
+        self.radio_swap = QRadioButton("Swap with the atom that has that number")
+        self.radio_move = QRadioButton("Move it there and shift the atoms between")
+        self.radio_swap.setChecked(self.settings.get("manual") != "move")
+        self.radio_move.setChecked(self.settings.get("manual") == "move")
+        manual_form.addRow(self.radio_swap)
+        manual_form.addRow(self.radio_move)
+        self.btn_manual = QPushButton("Apply Number")
+        self.btn_manual.setToolTip("Select one atom in the 3D view, type its new number, apply.")
+        self.btn_manual.clicked.connect(self.apply_number)
+        manual_form.addRow(self.btn_manual)
+        layout.addWidget(manual_box)
+        # The host has no selection signal for plugins; the selection is read
+        # on a short timer while the window is shown.
+        self._selection_timer = QTimer(self)
+        self._selection_timer.setInterval(400)
+        self._selection_timer.timeout.connect(self._update_selection)
+
         fit_box = QGroupBox("Superimpose by atom number")
         fit_form = QFormLayout(fit_box)
         self.cmb_fit = QComboBox()
@@ -161,7 +187,17 @@ class AtomIndexMapperDialog(QDialog):
             self._update_summary()
         return super().event(event)
 
+    def showEvent(self, event):
+        self._selection_timer.start()
+        self._update_selection()
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self._selection_timer.stop()
+        super().hideEvent(event)
+
     def closeEvent(self, event):
+        self._selection_timer.stop()
         self._remember()
         super().closeEvent(event)
 
@@ -169,6 +205,7 @@ class AtomIndexMapperDialog(QDialog):
         self.settings["method"] = self.cmb_method.currentData()
         self.settings["fit_on"] = self.cmb_fit.currentData()
         self.settings["perceive"] = self.chk_perceive.isChecked()
+        self.settings["manual"] = "move" if self.radio_move.isChecked() else "swap"
         save_settings(self.settings)
 
     # -------------------------------------------------------------- inputs
@@ -286,6 +323,75 @@ class AtomIndexMapperDialog(QDialog):
         self.lbl_result.setText("\n".join(text))
         self._fill_table(result.mapping, result.displacement, ref, changes)
         return result
+
+    def _selected_atom(self):
+        """(index, molecule) of the one selected atom, or (None, molecule)."""
+        try:
+            mol = self.loaded_molecule()
+        except core.MappingError:
+            return None, None
+        try:
+            picked = list(self.context.get_selected_atom_indices() or [])
+        except Exception:  # pragma: no cover - host API guard
+            logger.debug("%s: reading the selection failed", PLUGIN_NAME, exc_info=True)
+            picked = []
+        picked = [i for i in picked if 0 <= i < mol.GetNumAtoms()]
+        return (picked[0] if len(picked) == 1 else None), mol
+
+    def _update_selection(self) -> None:
+        index, mol = self._selected_atom()
+        count = mol.GetNumAtoms() if mol is not None else 0
+        if self.spin_number.maximum() != max(count, 1):
+            self.spin_number.setRange(1, max(count, 1))
+        if index is None:
+            picked = len(self.context.get_selected_atom_indices() or []) if mol else 0
+            self.lbl_selected.setText(
+                "none - select one atom in the 3D view"
+                if picked == 0
+                else f"{picked} atoms - select one"
+            )
+            self.btn_manual.setEnabled(False)
+            self._shown_selection = None
+            return
+        symbol = mol.GetAtomWithIdx(index).GetSymbol()
+        self.lbl_selected.setText(f"{index + 1} ({symbol})")
+        self.btn_manual.setEnabled(True)
+        if getattr(self, "_shown_selection", None) != index:
+            # A new pick starts the number box from its current number.
+            self._shown_selection = index
+            self.spin_number.setValue(index + 1)
+
+    def apply_number(self):
+        index, mol = self._selected_atom()
+        if index is None:
+            QMessageBox.warning(self, PLUGIN_NAME, "Select exactly one atom in the 3D view.")
+            return None
+        target = self.spin_number.value() - 1
+        count = mol.GetNumAtoms()
+        try:
+            if self.radio_move.isChecked():
+                order = core.move_order(count, index, target)
+            else:
+                order = core.swap_order(count, index, target)
+        except core.MappingError as exc:
+            QMessageBox.warning(self, PLUGIN_NAME, str(exc))
+            return None
+        self._remember()
+        if target == index:
+            self.lbl_result.setText(f"Atom {index + 1} already has that number.")
+            return order
+        symbol = mol.GetAtomWithIdx(index).GetSymbol()
+        if self.radio_move.isChecked():
+            text = f"Atom {index + 1} ({symbol}) moved to {target + 1}; the atoms between shifted by one."
+        else:
+            other = mol.GetAtomWithIdx(target).GetSymbol()
+            text = f"Atoms {index + 1} ({symbol}) and {target + 1} ({other}) swapped numbers."
+        self._apply(core.renumber(mol, order), text)
+        self._shown_selection = None
+        self.lbl_result.setText(text)
+        structure = core.structure_from_mol(self.context.current_molecule)
+        self._fill_table(order, [0.0] * count, structure, {})
+        return order
 
     def superimpose(self):
         try:

@@ -33,6 +33,9 @@ button superimposes the loaded molecule onto the file atom-by-number at minimum 
   - The report lists the bonds that exist only in the reference or only in the loaded
     molecule (the bonds the reaction forms and breaks), the RMSD after superposition
     and the deviation of every atom.
+- **Change one number by hand**: select one atom in the 3D view, type its new number
+  and apply. *Swap* exchanges numbers with the atom that had it; *Move* puts the atom
+  there and shifts the atoms between by one.
 - **Superimpose**: rotate and move the loaded molecule onto the reference, atom *i* onto
   atom *i*, by the Kabsch algorithm. Fit on all atoms, heavy atoms only, or the atoms
   selected in the editor (for example a framework that does not move during the
@@ -49,6 +52,9 @@ button superimposes the loaded molecule onto the file atom-by-number at minimum 
 2. Open **3D Edit > Atom Index Mapper...** and choose the other endpoint with
    **Browse...**.
 3. Click **Match Indices**. The loaded molecule now has the reference's atom order.
+   The two structures must contain exactly the same atoms (same count of every element);
+   otherwise the difference is shown and nothing changes. Fix any single number by hand
+   if needed.
 4. Optionally click **Superimpose** to bring it into the reference's frame, which keeps
    the interpolated NEB path short.
 5. Export the structure (for example **File > Export > XYZ**) for the calculation.

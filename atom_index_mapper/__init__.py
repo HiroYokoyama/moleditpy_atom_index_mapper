@@ -15,7 +15,7 @@ import os
 logger = logging.getLogger(__name__)
 
 PLUGIN_NAME = "Atom Index Mapper"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.0.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = (
     "Renumber the loaded molecule to the atom order of another structure file, keeping "
@@ -40,6 +40,7 @@ def default_settings():
         "method": "connectivity",
         "perceive": False,
         "fit_on": "all",
+        "manual": "swap",
     }
 
 

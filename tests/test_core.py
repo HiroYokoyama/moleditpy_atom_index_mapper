@@ -216,3 +216,12 @@ def test_formula_and_xyz_text():
     assert ref.formula() == "C2H6O"
     lines = core.xyz_text(ref, comment="x").splitlines()
     assert lines[0] == "9" and lines[1] == "x"
+
+
+def test_swap_and_move_orders():
+    assert core.swap_order(5, 1, 3) == [0, 3, 2, 1, 4]
+    assert core.move_order(5, 3, 0) == [3, 0, 1, 2, 4]
+    assert core.move_order(5, 0, 3) == [1, 2, 3, 0, 4]
+    assert core.swap_order(3, 1, 1) == [0, 1, 2]
+    with pytest.raises(core.MappingError, match="outside 1-5"):
+        core.move_order(5, 0, 5)
