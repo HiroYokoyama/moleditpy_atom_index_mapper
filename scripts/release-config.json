@@ -1,0 +1,19 @@
+{
+  "source": "atom_index_mapper/__init__.py",
+  "title": "Atom Index Mapper",
+  "package": "atom_index_mapper",
+  "archive": "atom_index_mapper_{version}.zip",
+  "assets": [
+    "atom_index_mapper_{version}.zip"
+  ],
+  "include": [
+    "README.md",
+    "LICENSE",
+    "COPYING",
+    "LICENSING.md"
+  ],
+  "exclude": [
+    "*/__pycache__/*",
+    "*/.git/*"
+  ]
+}
